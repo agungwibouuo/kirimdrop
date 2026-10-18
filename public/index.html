@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E14" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F5F4F0" media="(prefers-color-scheme: light)">
+<title>KirimDrop. Kirim file langsung antar perangkat</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23FFA050'/><path d='M16 8v12M11 15l5-5 5 5M10 24h12' stroke='%230B0E14' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>">
+<style>
+  :root {
+    --bg: #0B0E14;
+    --surface: #141926;
+    --surface2: #1B2233;
+    --line: #273042;
+    --text: #E9EDF5;
+    --muted: #9AA6BC;
+    --accent: #FFA050;
+    --accent-text: #FFA050;
+    --accent-bg: rgba(255, 160, 80, 0.12);
+    --accent-press: #E68A3A;
+    --ok: #3DDC97;
+    --ok-bg: rgba(61, 220, 151, 0.12);
+    --err: #FF7A6B;
+    --err-bg: rgba(255, 122, 107, 0.12);
+    --radius-card: 20px;
+    --radius-btn: 12px;
+    --radius-sm: 8px;
+    --focus: 0 0 0 3px rgba(255, 160, 80, 0.4);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #F5F4F0;
+      --surface: #FFFFFF;
+      --surface2: #EFEEE9;
+      --line: #DFDDD5;
+      --text: #1A1E28;
+      --muted: #5C6577;
+      --accent: #FF9E4A;
+      --accent-text: #9A4E00;
+      --accent-bg: rgba(255, 158, 74, 0.14);
+      --accent-press: #D87B24;
+      --ok: #0E7C4F;
+      --ok-bg: rgba(14, 124, 79, 0.12);
+      --err: #C2321E;
+      --err-bg: rgba(194, 50, 30, 0.12);
+      --focus: 0 0 0 3px rgba(216, 123, 36, 0.45);
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { min-height: 100%; }
+
+  body {
+    margin: 0;
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 650;
+    font-size: 17px;
+    letter-spacing: -0.2px;
+  }
+
+  .beacon {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--err);
+    transition: background-color 0.2s ease;
+    flex-shrink: 0;
+  }
+  .beacon.ready {
+    background: var(--ok);
+  }
+
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 20px 16px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    padding: 20px;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.2px;
+    margin: 0;
+  }
+
+  /* Identity motif: signal arcs radiating around the QR */
+  .connect-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+  }
+
+  @media (min-width: 520px) {
+    .connect-layout {
+      flex-direction: row;
+      align-items: center;
+      gap: 24px;
+    }
+  }
+
+  .beacon-stage {
+    position: relative;
+    width: 176px;
+    height: 176px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+
+  .beacon-arc {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid var(--accent);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Pulse motion dial 2: guides attention only while waiting for peers */
+  .waiting .beacon-arc.arc-1 {
+    animation: signalWave 3.2s cubic-bezier(0.2, 0.7, 0.4, 1) infinite;
+  }
+  .waiting .beacon-arc.arc-2 {
+    animation: signalWave 3.2s cubic-bezier(0.2, 0.7, 0.4, 1) infinite 1.1s;
+  }
+  .connected-room .beacon-arc {
+    display: none;
+  }
+
+  @keyframes signalWave {
+    0%   { transform: scale(0.7); opacity: 0.65; }
+    70%  { transform: scale(1.15); opacity: 0; }
+    100% { transform: scale(1.2); opacity: 0; }
+  }
+
+  #qrWrap {
+    position: relative;
+    z-index: 1;
+    background: #FFFFFF;
+    padding: 10px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  }
+  #qrWrap svg { display: block; }
+
+  .connect-info {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .room-display {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(22px, 5.2vw, 28px);
+    font-weight: 650;
+    letter-spacing: -0.3px;
+    color: var(--accent-text);
+    word-break: break-all;
+    line-height: 1.2;
+    padding: 2px 0;
+  }
+
+  .connect-desc {
+    font-size: 14px;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .action-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+
+  button, .btn {
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-btn);
+    padding: 11px 16px;
+    min-height: 44px;
+    min-width: 44px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.06s ease;
+  }
+
+  button:hover {
+    border-color: var(--accent);
+  }
+
+  button:active {
+    transform: scale(0.98);
+  }
+
+  button:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: none;
+    box-shadow: var(--focus);
+    border-color: var(--accent);
+  }
+
+  button.primary {
+    background: var(--accent);
+    color: #0B0E14;
+    border-color: transparent;
+  }
+  button.primary:hover {
+    background: var(--accent-press);
+    border-color: transparent;
+  }
+
+  button.subtle {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+    padding: 8px 12px;
+  }
+  button.subtle:hover {
+    color: var(--text);
+    background: var(--surface2);
+    border-color: var(--line);
+  }
+
+  .peer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .peer-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-btn);
+    transition: border-color 0.15s ease;
+  }
+  .peer-item.selected {
+    border-color: var(--accent);
+  }
+
+  .peer-meta {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .peer-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .peer-status {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .empty-state {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    background: var(--surface2);
+    border-radius: var(--radius-btn);
+    border: 1px dashed var(--line);
+  }
+
+  .dropzone {
+    border: 2px dashed var(--line);
+    border-radius: var(--radius-btn);
+    padding: 28px 16px;
+    text-align: center;
+    background: var(--surface2);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+    cursor: pointer;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+  .dropzone-label {
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .dropzone-sub {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .text-sender {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    font: inherit;
+    font-size: 16px;
+    padding: 11px 14px;
+    min-height: 44px;
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-btn);
+    color: var(--text);
+    transition: border-color 0.15s ease;
+  }
+
+  .xfer-item {
+    margin-top: 10px;
+    padding: 12px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-btn);
+  }
+
+  .xfer-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    font-size: 14px;
+  }
+
+  .xfer-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .xfer-pct {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .progress-rail {
+    height: 6px;
+    background: var(--surface);
+    border-radius: 99px;
+    overflow: hidden;
+    margin: 8px 0 6px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: 99px;
+    transition: width 0.12s linear;
+  }
+
+  .xfer-item.ok .progress-fill {
+    background: var(--ok);
+  }
+  .xfer-item.err .progress-fill {
+    background: var(--err);
+  }
+
+  .xfer-foot {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  footer {
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    padding: 8px 16px 20px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translate(-50%, 8px);
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.16s ease, opacity 0.16s ease;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    z-index: 50;
+    max-width: 90vw;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  /* Peer actions row */
+  .peer-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  button.danger {
+    background: transparent;
+    border-color: var(--err);
+    color: var(--err);
+  }
+  button.danger:hover {
+    background: var(--err-bg);
+    border-color: var(--err);
+  }
+  button.danger:active {
+    transform: scale(0.98);
+  }
+
+  /* Chat */
+  .chat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .msg {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: var(--radius-btn);
+    font-size: 14px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .msg.out {
+    align-self: flex-end;
+    background: var(--accent-bg);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .msg.in {
+    align-self: flex-start;
+    background: var(--surface2);
+    border: 1px solid var(--line);
+  }
+  .msg-who {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+  .msg .copy-btn {
+    margin-top: 8px;
+    min-height: 32px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  /* Subsection separator */
+  .subsection-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    margin: 14px 0 6px;
+    letter-spacing: 0.2px;
+  }
+  .subsection-title:first-child {
+    margin-top: 0;
+  }
+
+  .send-to {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0 0 8px;
+  }
+  .send-to strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  #fileOut:empty, #fileIn:empty, #chatList:empty {
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="beacon" id="beacon" aria-hidden="true"></span>
+    <span>KirimDrop</span>
+  </div>
+  <button id="btnRename" class="subtle" type="button" aria-label="Ganti nama perangkat">
+    <span id="myName">Memuat…</span>
+  </button>
+</header>
+
+<main>
+  <!-- Sambung: QR + Room Code + Identity Motif -->
+  <section class="card" aria-labelledby="heading-connect">
+    <div class="card-head">
+      <h2 class="card-title" id="heading-connect">Sambungkan perangkat</h2>
+    </div>
+
+    <div class="connect-layout waiting" id="connectLayout">
+      <div class="beacon-stage">
+        <span class="beacon-arc arc-1" aria-hidden="true"></span>
+        <span class="beacon-arc arc-2" aria-hidden="true"></span>
+        <div id="qrWrap" aria-label="QR code room"></div>
+      </div>
+
+      <div class="connect-info">
+        <div class="room-display" id="roomCode">…</div>
+        <p class="connect-desc">
+          Scan QR dari HP kedua, atau buka tautan yang sama untuk langsung terhubung.
+        </p>
+        <div class="action-row">
+          <button type="button" id="btnCopyLink" class="primary">Salin tautan</button>
+          <button type="button" id="btnCopyRoom">Salin kode</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Daftar Peer -->
+  <section class="card" aria-labelledby="heading-peers">
+    <div class="card-head">
+      <h2 class="card-title" id="heading-peers">Perangkat di room ini</h2>
+    </div>
+    <div class="peer-list" id="peers">
+      <div class="empty-state">
+        Belum ada perangkat lain. Scan QR di atas dari HP kedua untuk mulai.
+      </div>
+    </div>
+  </section>
+
+  <!-- File: kirim + terima -->
+  <section class="card" id="fileCard" aria-labelledby="heading-file" hidden>
+    <div class="card-head">
+      <h2 class="card-title" id="heading-file">File</h2>
+    </div>
+
+    <div id="fileSendArea" hidden>
+      <p class="send-to">Kirim ke <strong id="fileTargetName">…</strong></p>
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Pilih atau jatuhkan file untuk dikirim">
+        <div class="dropzone-label">Pilih file atau foto</div>
+        <div class="dropzone-sub">Bisa juga seret dan lepaskan file ke sini</div>
+        <input type="file" id="fileInput" multiple hidden>
+      </div>
+    </div>
+
+    <div class="subsection-title" id="fileOutTitle" hidden>Keluar</div>
+    <div id="fileOut"></div>
+
+    <div class="subsection-title" id="fileInTitle" hidden>Masuk</div>
+    <div id="fileIn"></div>
+  </section>
+
+  <!-- Pesan: chat dua arah -->
+  <section class="card" id="chatCard" aria-labelledby="heading-chat" hidden>
+    <div class="card-head">
+      <h2 class="card-title" id="heading-chat">Pesan</h2>
+    </div>
+
+    <form class="text-sender" id="textForm" hidden>
+      <input type="text" id="textInput" placeholder="Ketik pesan pendek…" autocomplete="off">
+      <button type="submit">Kirim</button>
+    </form>
+
+    <div class="chat-list" id="chatList"></div>
+  </section>
+</main>
+
+<footer>Transfer langsung antar perangkat (P2P). Berkas tidak disimpan di server.</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="/qrcode.min.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  const CHUNK = 64 * 1024;
+  const HIGH_WATER = 4 * 1024 * 1024;
+  const LOW_WATER = 1 * 1024 * 1024;
+
+  const state = {
+    ws: null,
+    myId: null,
+    room: null,
+    name: localStorage.getItem('kd.name') || defaultName(),
+    peers: new Map(),
+    target: null,
+    xfers: new Map(),
+  };
+
+  const $ = (sel) => document.querySelector(sel);
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  function defaultName() {
+    const pool = ['iPhone', 'Xiaomi', 'Android', 'Laptop', 'Kucing', 'Merpati', 'Naga', 'Harimau'];
+    return pool[Math.floor(Math.random() * pool.length)] + ' ' + Math.floor(Math.random() * 90 + 10);
+  }
+
+  function toast(msg, ms = 2200) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), ms);
+  }
+
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+    return (n / 1073741824).toFixed(2) + ' GB';
+  }
+
+  function makeRoom() {
+    const words = ['oren', 'biru', 'hijau', 'merah', 'putih', 'emas', 'bulan', 'matahari', 'kopi', 'teh', 'angin', 'hujan', 'salju', 'batu', 'kayu', 'api'];
+    const a = words[Math.floor(Math.random() * words.length)];
+    const b = words[Math.floor(Math.random() * words.length)];
+    return `${a}-${b}-${Math.floor(Math.random() * 900 + 100)}`;
+  }
+
+  function roomFromHash() {
+    const h = location.hash.replace(/^#\/?/, '').trim();
+    return /^[a-z0-9-]{1,64}$/i.test(h) ? h.toLowerCase() : null;
+  }
+
+  function roomLink(room) {
+    return location.origin + '/#' + room;
+  }
+
+  function renderRoom() {
+    $('#roomCode').textContent = state.room;
+    $('#myName').textContent = state.name;
+    const wrap = $('#qrWrap');
+    wrap.innerHTML = '';
+    try {
+      const qr = qrcode(0, 'M');
+      qr.addData(roomLink(state.room));
+      qr.make();
+      wrap.innerHTML = qr.createSvgTag({ scalable: true });
+      const svg = wrap.querySelector('svg');
+      if (svg) {
+        svg.setAttribute('width', '136');
+        svg.setAttribute('height', '136');
+      }
+    } catch {
+      wrap.textContent = 'Gagal memuat QR';
+    }
+  }
+
+  function renderPeers() {
+    const box = $('#peers');
+    box.innerHTML = '';
+    const list = [...state.peers.values()];
+    const layout = $('#connectLayout');
+
+    if (list.length === 0) {
+      box.appendChild(el('div', 'empty-state', 'Belum ada perangkat lain. Scan QR di atas dari HP kedua untuk mulai.'));
+      layout.classList.add('waiting');
+      layout.classList.remove('connected-room');
+    } else {
+      layout.classList.remove('waiting');
+      layout.classList.add('connected-room');
+    }
+
+    for (const p of list) {
+      const row = el('div', 'peer-item' + (p.id === state.target ? ' selected' : ''));
+      const meta = el('div', 'peer-meta');
+      meta.appendChild(el('div', 'peer-name', p.name));
+      const statusText = p.connected ? 'Terhubung (siap kirim)' : (p.pc ? 'Menghubungkan…' : 'Tersedia');
+      meta.appendChild(el('div', 'peer-status', statusText));
+      row.appendChild(meta);
+
+      const actions = el('div', 'peer-actions');
+
+      if (p.connected) {
+        const cut = el('button', 'danger', 'Putuskan');
+        cut.type = 'button';
+        cut.setAttribute('aria-label', 'Putuskan koneksi dari ' + p.name);
+        cut.addEventListener('click', () => disconnectPeer(p));
+        actions.appendChild(cut);
+      }
+
+      const btn = el('button', p.id === state.target ? 'primary' : '', p.id === state.target ? 'Dipilih' : 'Pilih');
+      btn.type = 'button';
+      btn.addEventListener('click', () => {
+        state.target = state.target === p.id ? null : p.id;
+        renderPeers();
+        updateCards();
+      });
+      actions.appendChild(btn);
+      row.appendChild(actions);
+      box.appendChild(row);
+    }
+  }
+
+  function updateCards() {
+    const p = state.target ? state.peers.get(state.target) : null;
+    const hasOut = $('#fileOut').childElementCount > 0;
+    const hasIn = $('#fileIn').childElementCount > 0;
+    const hasChat = $('#chatList').childElementCount > 0;
+
+    $('#fileCard').hidden = !(p || hasOut || hasIn);
+    $('#chatCard').hidden = !(p || hasChat);
+
+    $('#fileSendArea').hidden = !p;
+    $('#textForm').hidden = !p;
+    if (p) $('#fileTargetName').textContent = p.name;
+
+    $('#fileOutTitle').hidden = !hasOut;
+    $('#fileInTitle').hidden = !hasIn;
+  }
+
+  function resetPeerConnection(peer) {
+    if (peer.dc) {
+      try { peer.dc.close(); } catch {}
+    }
+    if (peer.pc) {
+      try { peer.pc.close(); } catch {}
+    }
+    peer.dc = null;
+    peer.pc = null;
+    peer.connected = false;
+  }
+
+  function disconnectPeer(peer) {
+    signal(peer.id, { type: 'bye' });
+    resetPeerConnection(peer);
+    renderPeers();
+    updateCards();
+    toast('Terputus dari ' + peer.name);
+  }
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${proto}//${location.host}/ws`);
+    state.ws = ws;
+
+    ws.addEventListener('open', () => {
+      $('#beacon').classList.add('ready');
+      ws.send(JSON.stringify({ type: 'join', room: state.room, name: state.name }));
+    });
+
+    ws.addEventListener('close', () => {
+      $('#beacon').classList.remove('ready');
+      setTimeout(connect, 1500);
+    });
+
+    ws.addEventListener('message', async (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+
+      if (msg.type === 'welcome') {
+        state.myId = msg.id;
+        for (const p of msg.peers) ensurePeer(p.id, p.name);
+        renderPeers();
+      } else if (msg.type === 'peer-join') {
+        ensurePeer(msg.id, msg.name);
+        toast(msg.name + ' bergabung');
+        renderPeers();
+      } else if (msg.type === 'peer-leave') {
+        const p = state.peers.get(msg.id);
+        if (p) {
+          if (p.pc) p.pc.close();
+          state.peers.delete(msg.id);
+        }
+        if (state.target === msg.id) state.target = null;
+        renderPeers();
+        updateCards();
+      } else if (msg.type === 'signal') {
+        await handleSignal(msg.from, msg.data);
+      }
+    });
+  }
+
+  function signal(to, data) {
+    if (!state.ws || state.ws.readyState !== 1) return;
+    state.ws.send(JSON.stringify({ type: 'signal', to, data }));
+  }
+
+  function ensurePeer(id, name) {
+    if (state.peers.has(id)) {
+      state.peers.get(id).name = name;
+      return state.peers.get(id);
+    }
+    const peer = { id, name, pc: null, dc: null, connected: false };
+    state.peers.set(id, peer);
+    return peer;
+  }
+
+  const RTC_CONF = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
+
+  function createPC(peer) {
+    const pc = new RTCPeerConnection(RTC_CONF);
+    peer.pc = pc;
+    pc.onicecandidate = (e) => {
+      if (e.candidate) signal(peer.id, { type: 'ice', candidate: e.candidate });
+    };
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
+        peer.connected = false;
+        peer.dc = null;
+        renderPeers();
+      }
+    };
+    return pc;
+  }
+
+  function attachDataChannel(peer, dc) {
+    peer.dc = dc;
+    dc.binaryType = 'arraybuffer';
+    dc.bufferedAmountLowThreshold = LOW_WATER;
+
+    dc.onopen = () => {
+      peer.connected = true;
+      renderPeers();
+      updateCards();
+    };
+    dc.onclose = () => {
+      peer.connected = false;
+      peer.dc = null;
+      renderPeers();
+      updateCards();
+    };
+    dc.onmessage = (e) => {
+      if (typeof e.data === 'string') {
+        let m;
+        try { m = JSON.parse(e.data); } catch { return; }
+        handleControl(peer, m);
+      } else {
+        handleChunk(peer, e.data);
+      }
+    };
+  }
+
+  async function startOffer(peer) {
+    const pc = peer.pc || createPC(peer);
+    attachDataChannel(peer, pc.createDataChannel('kd', { ordered: true }));
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    signal(peer.id, { type: 'offer', sdp: pc.localDescription });
+  }
+
+  async function handleSignal(fromId, data) {
+    if (!data || !data.type) return;
+    const peer = ensurePeer(fromId, (state.peers.get(fromId) || {}).name || 'Perangkat');
+
+    if (data.type === 'bye') {
+      resetPeerConnection(peer);
+      renderPeers();
+      updateCards();
+      toast(peer.name + ' memutuskan koneksi');
+      return;
+    }
+
+    if (data.type === 'offer') {
+      const pc = peer.pc || createPC(peer);
+      pc.ondatachannel = (ev) => attachDataChannel(peer, ev.channel);
+      await pc.setRemoteDescription(data.sdp);
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      signal(fromId, { type: 'answer', sdp: pc.localDescription });
+    } else if (data.type === 'answer') {
+      if (peer.pc) await peer.pc.setRemoteDescription(data.sdp);
+    } else if (data.type === 'ice') {
+      if (peer.pc && peer.pc.remoteDescription) {
+        try { await peer.pc.addIceCandidate(data.candidate); } catch {}
+      }
+    }
+  }
+
+  function newXfer(peer, fileName, size, kind) {
+    const id = 'x' + Math.random().toString(36).slice(2, 10);
+    const box = el('div', 'xfer-item');
+    const head = el('div', 'xfer-head');
+    head.appendChild(el('div', 'xfer-name', fileName));
+    const pct = el('div', 'xfer-pct', '0%');
+    head.appendChild(pct);
+
+    const rail = el('div', 'progress-rail');
+    const fill = el('div', 'progress-fill');
+    rail.appendChild(fill);
+
+    const foot = el('div', 'xfer-foot');
+    foot.appendChild(el('span', '', kind === 'file' ? fmtBytes(size) : 'Pesan teks'));
+    const spd = el('span', '', '');
+    foot.appendChild(spd);
+
+    box.appendChild(head);
+    box.appendChild(rail);
+    box.appendChild(foot);
+    $('#fileOut').prepend(box);
+    updateCards();
+
+    const x = {
+      id, peer, box, fill, pct, spd, size,
+      sent: 0, started: Date.now(), done: false, cancelled: false,
+    };
+    state.xfers.set(id, x);
+    return x;
+  }
+
+  function updateXfer(x, status) {
+    const p = x.size > 0 ? Math.min(100, Math.floor((x.sent / x.size) * 100)) : 100;
+    x.fill.style.width = p + '%';
+    x.pct.textContent = p + '%';
+    const secs = (Date.now() - x.started) / 1000;
+    if (secs > 0.4 && x.sent > 0) x.spd.textContent = (x.sent / secs / 1048576).toFixed(1) + ' MB/s';
+    if (status === 'ok') {
+      x.box.classList.add('ok');
+      x.pct.textContent = 'Selesai';
+      x.fill.style.width = '100%';
+    }
+    if (status === 'err') {
+      x.box.classList.add('err');
+      x.pct.textContent = 'Gagal';
+    }
+  }
+
+  function waitDrain(dc) {
+    return new Promise((resolve) => {
+      if (dc.bufferedAmount < HIGH_WATER) return resolve();
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        clearInterval(iv);
+        dc.removeEventListener('bufferedamountlow', finish);
+        resolve();
+      };
+      dc.addEventListener('bufferedamountlow', finish);
+      const iv = setInterval(() => {
+        if (dc.bufferedAmount < HIGH_WATER) finish();
+      }, 120);
+    });
+  }
+
+  async function sendFile(peer, file) {
+    const dc = peer.dc;
+    if (!dc || dc.readyState !== 'open') {
+      toast('Koneksi belum siap, coba lagi');
+      return;
+    }
+    const id = 'x' + Math.random().toString(36).slice(2, 10);
+    const x = newXfer(peer, file.name, file.size, 'file');
+    x.id = id;
+
+    dc.send(JSON.stringify({ k: 'start', id, name: file.name, size: file.size, mime: file.type }));
+    const CH = CHUNK;
+    for (let offset = 0; offset < file.size; offset += CH) {
+      if (x.cancelled) break;
+      await waitDrain(dc);
+      const slice = file.slice(offset, Math.min(offset + CH, file.size));
+      const buf = await slice.arrayBuffer();
+      dc.send(buf);
+      x.sent += buf.byteLength;
+      updateXfer(x);
+      if (x.sent % (CH * 16) === 0) await new Promise(r => setTimeout(r, 0));
+    }
+    dc.send(JSON.stringify({ k: 'end', id }));
+    updateXfer(x, 'ok');
+  }
+
+  async function sendText(peer, text) {
+    const dc = peer.dc;
+    if (!dc || dc.readyState !== 'open') {
+      toast('Koneksi belum siap');
+      return;
+    }
+    const id = 't' + Math.random().toString(36).slice(2, 10);
+    dc.send(JSON.stringify({ k: 'start', id, text }));
+    dc.send(JSON.stringify({ k: 'end', id }));
+
+    appendMessage('out', 'Kamu', text);
+  }
+
+  function appendMessage(dir, who, text) {
+    const box = el('div', 'msg ' + dir);
+    box.appendChild(el('span', 'msg-who', who));
+    box.appendChild(document.createTextNode(text));
+    if (dir === 'in') {
+      const btn = el('button', 'subtle copy-btn', 'Salin');
+      btn.type = 'button';
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          toast('Teks disalin');
+        } catch {
+          toast('Gagal menyalin');
+        }
+      });
+      box.appendChild(btn);
+    }
+    $('#chatList').appendChild(box);
+    updateCards();
+  }
+
+  function handleControl(peer, m) {
+    if (m.k === 'start') {
+      if (m.text != null) {
+        appendMessage('in', peer.name, m.text);
+        toast('Pesan masuk');
+        return;
+      }
+
+      const box = el('div', 'xfer-item');
+      const head = el('div', 'xfer-head');
+      head.appendChild(el('div', 'xfer-name', m.name));
+      const pct = el('div', 'xfer-pct', '0%');
+      head.appendChild(pct);
+
+      const rail = el('div', 'progress-rail');
+      const fill = el('div', 'progress-fill');
+      rail.appendChild(fill);
+
+      const foot = el('div', 'xfer-foot');
+      foot.appendChild(el('span', '', fmtBytes(m.size)));
+      const spd = el('span', '', '');
+      foot.appendChild(spd);
+
+      box.appendChild(head);
+      box.appendChild(rail);
+      box.appendChild(foot);
+      $('#fileIn').prepend(box);
+      updateCards();
+
+      state.xfers.set(m.id, {
+        id: m.id, peer, name: m.name, size: m.size, mime: m.mime,
+        chunks: [], recv: 0, started: Date.now(),
+        box, fill, pct, spd, dir: 'in',
+      });
+    } else if (m.k === 'end') {
+      const x = state.xfers.get(m.id);
+      if (!x || x.dir !== 'in') return;
+      const blob = new Blob(x.chunks, { type: x.mime || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = x.name || 'berkas';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+      x.box.classList.add('ok');
+      x.fill.style.width = '100%';
+      x.pct.textContent = 'Selesai';
+      const secs = (Date.now() - x.started) / 1000;
+      x.spd.textContent = secs > 0 ? (x.recv / secs / 1048576).toFixed(1) + ' MB/s' : '';
+      toast('Berkas diterima: ' + x.name, 2600);
+      state.xfers.delete(m.id);
+    }
+  }
+
+  function handleChunk(peer, buf) {
+    for (const x of state.xfers.values()) {
+      if (x.dir === 'in' && x.peer === peer && !x.done) {
+        x.chunks.push(buf);
+        x.recv += buf.byteLength;
+        const p = x.size > 0 ? Math.min(100, Math.floor((x.recv / x.size) * 100)) : 100;
+        x.fill.style.width = p + '%';
+        x.pct.textContent = p + '%';
+        const secs = (Date.now() - x.started) / 1000;
+        if (secs > 0.5) x.spd.textContent = (x.recv / secs / 1048576).toFixed(1) + ' MB/s';
+        return;
+      }
+    }
+  }
+
+  function pickTarget() {
+    const p = state.target ? state.peers.get(state.target) : null;
+    if (!p) {
+      toast('Pilih perangkat tujuan terlebih dahulu');
+      return null;
+    }
+    if (!p.pc) startOffer(p);
+    return p;
+  }
+
+  async function withTarget(fn) {
+    const p = pickTarget();
+    if (!p) return;
+    if (p.connected && p.dc && p.dc.readyState === 'open') return fn(p);
+    toast('Menghubungkan ke ' + p.name + '…');
+    await new Promise((resolve) => {
+      const t0 = Date.now();
+      const iv = setInterval(() => {
+        if (p.connected && p.dc && p.dc.readyState === 'open') {
+          clearInterval(iv);
+          resolve();
+        } else if (Date.now() - t0 > 12000) {
+          clearInterval(iv);
+          resolve();
+        }
+      }, 250);
+    });
+    if (!p.connected) {
+      toast('Gagal terhubung, silakan coba lagi');
+      return;
+    }
+    return fn(p);
+  }
+
+  $('#btnCopyRoom').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(state.room);
+      toast('Kode room disalin');
+    } catch {
+      toast(state.room, 4000);
+    }
+  });
+
+  $('#btnCopyLink').addEventListener('click', async () => {
+    const link = roomLink(state.room);
+    try {
+      await navigator.clipboard.writeText(link);
+      toast('Tautan disalin');
+    } catch {
+      prompt('Salin tautan ini:', link);
+    }
+  });
+
+  $('#btnRename').addEventListener('click', () => {
+    const n = prompt('Nama perangkat ini:', state.name);
+    if (n && n.trim()) {
+      state.name = n.trim().slice(0, 32);
+      localStorage.setItem('kd.name', state.name);
+      $('#myName').textContent = state.name;
+      if (state.ws && state.ws.readyState === 1) {
+        state.ws.close();
+      }
+    }
+  });
+
+  const dz = $('#dropzone');
+  dz.addEventListener('click', () => $('#fileInput').click());
+  dz.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      $('#fileInput').click();
+    }
+  });
+  ['dragenter', 'dragover'].forEach((ev) =>
+    dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('dragover'); }));
+  ['dragleave', 'drop'].forEach((ev) =>
+    dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('dragover'); }));
+  dz.addEventListener('drop', (e) => {
+    const files = [...(e.dataTransfer?.files || [])];
+    if (!files.length) return;
+    withTarget(async (p) => { for (const f of files) await sendFile(p, f); });
+  });
+
+  $('#fileInput').addEventListener('change', (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (!files.length) return;
+    withTarget(async (p) => { for (const f of files) await sendFile(p, f); });
+  });
+
+  $('#textForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const inp = $('#textInput');
+    const text = inp.value.trim();
+    if (!text) return;
+    withTarget(async (p) => {
+      await sendText(p, text);
+      inp.value = '';
+    });
+  });
+
+  function boot() {
+    state.room = roomFromHash() || makeRoom();
+    if (location.hash.replace(/^#\/?/, '') !== state.room) {
+      history.replaceState(null, '', '#' + state.room);
+    }
+    renderRoom();
+    connect();
+  }
+
+  window.addEventListener('hashchange', () => location.reload());
+  boot();
+})();
+</script>
+</body>
+</html>
